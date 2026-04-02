@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f8f9fa; }
+    h2 { margin: 0; padding: 18px; background: #0f172a; color: white; text-align: center; font-size: 22px; }
+    .container { padding: 20px; }
+    .step { display: none; }
+    .step.active { display: block; }
+
+    .checkbox-grid { 
+      display: grid; 
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); 
+      gap: 12px; 
+      margin: 15px 0;
+    }
+    .checkbox-item { 
+      background: white; 
+      border: 1px solid #ddd; 
+      border-radius: 8px; 
+      padding: 14px; 
+      font-size: 15px;
+    }
+
+    .tab-bar { 
+      display: flex; 
+      background: #f1f3f4; 
+      border-bottom: 3px solid #0f172a; 
+      flex-wrap: wrap;
+    }
+    .tab { 
+      padding: 14px 22px; 
+      cursor: pointer; 
+      font-weight: bold; 
+      border-right: 1px solid #ddd;
+    }
+    .tab.active { 
+      background: white; 
+      border-top: 3px solid #0f172a; 
+      color: #0f172a;
+    }
+
+    .instructions { 
+      background: #fff3cd; 
+      padding: 15px; 
+      border-radius: 8px; 
+      margin: 15px 0; 
+      white-space: pre-wrap;
+      font-size: 14px;
+    }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding: 12px 8px; border: 1px solid #ddd; text-align: left; vertical-align: middle; }
+    th { background: #0f172a; color: white; }
+
+    .score-col { width: 180px; white-space: nowrap; }
+
+    input[type="number"] { 
+      width: 85px; 
+      padding: 8px; 
+      font-size: 16px; 
+      border: 1px solid #ccc; 
+      border-radius: 4px; 
+    }
+
+    .submit-btn-per-row { 
+      background: #38761d; 
+      color: white; 
+      padding: 9px 16px; 
+      font-size: 15px; 
+      border: none; 
+      border-radius: 4px; 
+      cursor: pointer; 
+      margin-left: 8px;
+    }
+
+    .main-btn {
+      background: #0f172a; 
+      color: white;
+      padding: 10px 20px;
+      font-size: 15px;
+    }
+
+    .has-score { background-color: #d9ead3 !important; }   /* valid score */
+    .invalid-score { background-color: #ea9999 !important; } /* out of range */
+  </style>
+</head>
+<body>
+
+<h2>Score Assistant</h2>
+<div class="container">
+
+  <!-- STEP 1 -->
+  <div id="step1" class="step active">
+    <h3>Select Trainees to Score</h3>
+    <div id="traineeGrid" class="checkbox-grid"></div>
+    <button onclick="goToScoring()" class="main-btn">Continue to Scoring →</button>
+  </div>
+
+  <!-- STEP 2 -->
+  <div id="step2" class="step">
+    <div class="tab-bar" id="tabBar"></div>
+    
+    <div class="controls">
+      <button onclick="addTraineeToScoring()" class="main-btn">+ Add Trainee</button>
+      <button onclick="removeSelectedFromScoring()" class="main-btn">− Remove Selected</button>
+    </div>
+
+    <div id="tabContent"></div>
+  </div>
+
+</div>
+
+<!-- Add Modal -->
+<div id="addModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:1000; justify-content:center; align-items:center;">
+  <div style="background:white; padding:25px; border-radius:10px; width:400px;">
+    <h3>Add Trainee</h3>
+    <select id="addTraineeSelect" style="width:100%; padding:10px; margin:15px 0; font-size:16px;"></select>
+    <div style="text-align:right; margin-top:15px;">
+      <button onclick="closeAddModal()" style="background:#ccc; margin-right:8px;">Cancel</button>
+      <button onclick="confirmAddTrainee()" style="background:#0f172a; color:white;">Add Trainee</button>
+    </div>
+  </div>
+</div>
+
+<!-- Remove Modal -->
+<div id="removeModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:1000; justify-content:center; align-items:center;">
+  <div style="background:white; padding:25px; border-radius:10px; width:400px;">
+    <h3>Remove Trainee</h3>
+    <select id="removeTraineeSelect" style="width:100%; padding:10px; margin:15px 0; font-size:16px;"></select>
+    <div style="text-align:right; margin-top:15px;">
+      <button onclick="closeRemoveModal()" style="background:#ccc; margin-right:8px;">Cancel</button>
+      <button onclick="confirmRemoveTrainee()" style="background:#c5221f; color:white;">Remove Trainee</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let selectedTrainees = [];
+let currentEventIndex = 0;
+const events = ["XM7", "M320", "M17", "Obstacle Course", "Grenade", "AT-4", "M250", "IET"];
+let instructionsMap = {};
+let allTraineesWithScores = [];
+
+// Initial load
+function loadInitialData() {
+  google.script.run
+    .withSuccessHandler(data => {
+      instructionsMap = data.instructions || {};
+      allTraineesWithScores = data.trainees || [];
+      renderTraineeSelection(allTraineesWithScores);
+    })
+    .withFailureHandler(err => {
+      console.error(err);
+      document.getElementById("traineeGrid").innerHTML = `<p style="color:red">Failed to load data.<br>Run "Start OSUT" first.</p>`;
+    })
+    .getScoreAssistantInitialData();
+}
+
+function renderTraineeSelection(trainees) {
+  const grid = document.getElementById("traineeGrid");
+  grid.innerHTML = trainees.map(t => `
+    <div class="checkbox-item">
+      <input type="checkbox" id="t_${t.id}" value="${t.id}">
+      <label for="t_${t.id}"><strong>${t.name}</strong></label>
+    </div>
+  `).join('');
+}
+
+function goToScoring() {
+  const checkedIds = Array.from(document.querySelectorAll('#step1 input:checked')).map(cb => cb.value);
+  if (checkedIds.length === 0) {
+    alert("Please select at least one trainee.");
+    return;
+  }
+
+  selectedTrainees = allTraineesWithScores.filter(t => checkedIds.includes(t.id));
+
+  document.getElementById("step1").classList.remove("active");
+  document.getElementById("step2").classList.add("active");
+
+  createTabs();
+  loadTab(0);
+}
+
+function createTabs() {
+  const bar = document.getElementById("tabBar");
+  bar.innerHTML = events.map((event, i) => `
+    <div class="tab ${i === 0 ? 'active' : ''}" onclick="loadTab(${i})">${event}</div>
+  `).join('');
+}
+
+// Dynamic load with correct coloring (green / red)
+function loadTab(index) {
+  currentEventIndex = index;
+  const eventName = events[index];
+
+  document.querySelectorAll('.tab').forEach((tab, i) => tab.classList.toggle('active', i === index));
+
+  const instructions = instructionsMap[eventName] || "No instructions available yet.";
+
+  let html = `<h3>${eventName}</h3>`;
+  html += `<div class="instructions">${instructions}</div>`;
+  html += `<table><tr><th>Trainee</th><th>RSO</th><th>DI</th><th>Score</th></tr>`;
+
+  selectedTrainees.forEach(t => {
+    html += `
+      <tr id="row_${t.id}">
+        <td><strong>${t.name}</strong></td>
+        <td>${t.rso || '—'}</td>
+        <td>${t.di || '—'}</td>
+        <td class="score-col">
+          <input type="number" id="score_${t.id}" placeholder="Enter score" step="0.01">
+          <button onclick="submitSingleScore('${t.id}', '${eventName}')" class="submit-btn-per-row">Submit</button>
+        </td>
+      </tr>`;
+  });
+
+  html += `</table>`;
+  document.getElementById("tabContent").innerHTML = html;
+
+  // Dynamically read current score + validation status from sheet
+  selectedTrainees.forEach(t => {
+    google.script.run
+      .withSuccessHandler(result => {
+        const input = document.getElementById(`score_${t.id}`);
+        if (input) input.value = result.score || "";
+
+        const row = document.getElementById(`row_${t.id}`);
+        if (row) {
+          if (result.isValid && result.score !== "" && result.score !== "PENDING") {
+            row.classList.add("has-score");        // green
+            row.classList.remove("invalid-score");
+          } else if (result.score !== "" && result.score !== "PENDING") {
+            row.classList.add("invalid-score");    // light red
+            row.classList.remove("has-score");
+          } else {
+            row.classList.remove("has-score", "invalid-score"); // white / PENDING
+          }
+        }
+      })
+      .getScoreWithValidation(t.id, eventName);
+  });
+}
+
+function submitSingleScore(traineeId, eventName) {
+  const input = document.getElementById(`score_${traineeId}`);
+  if (!input || input.value.trim() === "") {
+    alert("Please enter a score.");
+    return;
+  }
+
+  const score = parseFloat(input.value);
+
+  google.script.run
+    .withSuccessHandler(validation => {
+      if (!validation.valid) {
+        alert(validation.message || "Invalid score.");
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(() => {
+          loadTab(currentEventIndex);
+        })
+        .withFailureHandler(err => alert("Error saving: " + err.message))
+        .submitScores({
+          event: eventName,
+          scores: [{ traineeId: traineeId, score: score }]
+        });
+    })
+    .withFailureHandler(err => alert("Validation error: " + err.message))
+    .validateScore(eventName, score);
+}
+
+// Add / Remove (unchanged)
+function addTraineeToScoring() {
+  const remaining = allTraineesWithScores.filter(t => !selectedTrainees.some(st => st.id === t.id));
+  if (remaining.length === 0) { alert("No more trainees available."); return; }
+  const select = document.getElementById("addTraineeSelect");
+  select.innerHTML = remaining.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  document.getElementById("addModal").style.display = "flex";
+}
+
+function closeAddModal() { document.getElementById("addModal").style.display = "none"; }
+
+function confirmAddTrainee() {
+  const id = document.getElementById("addTraineeSelect").value;
+  if (id) {
+    const trainee = allTraineesWithScores.find(t => t.id === id);
+    if (trainee) selectedTrainees.push(trainee);
+    loadTab(currentEventIndex);
+  }
+  closeAddModal();
+}
+
+function removeSelectedFromScoring() {
+  if (selectedTrainees.length === 0) { alert("No trainees to remove."); return; }
+  const select = document.getElementById("removeTraineeSelect");
+  select.innerHTML = selectedTrainees.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  document.getElementById("removeModal").style.display = "flex";
+}
+
+function closeRemoveModal() { document.getElementById("removeModal").style.display = "none"; }
+
+function confirmRemoveTrainee() {
+  const id = document.getElementById("removeTraineeSelect").value;
+  if (id) {
+    selectedTrainees = selectedTrainees.filter(t => t.id !== id);
+    loadTab(currentEventIndex);
+  }
+  closeRemoveModal();
+}
+
+// Initialize
+window.onload = loadInitialData;
+</script>
+
+</body>
+</html>
