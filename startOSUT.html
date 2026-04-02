@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 20px; 
+      line-height: 1.5;
+    }
+    h2 { margin-top: 0; color: #1a73e8; }
+    textarea { 
+      width: 100%; 
+      height: 120px; 
+      font-family: monospace;
+      margin-bottom: 15px;
+    }
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      margin: 15px 0;
+    }
+    th, td { 
+      border: 1px solid #ddd; 
+      padding: 10px; 
+      text-align: left;
+    }
+    th { 
+      background: #f1f3f4; 
+      font-weight: bold;
+    }
+    .section { margin: 20px 0; }
+    .status { 
+      margin: 15px 0; 
+      padding: 16px; 
+      border-radius: 8px; 
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .good  { background: #e6f4ea; color: #137333; }
+    .bad   { background: #fce8e6; color: #c5221f; }
+    button { 
+      padding: 14px 28px; 
+      font-size: 16px; 
+      background: #1a73e8; 
+      color: white; 
+      border: none; 
+      border-radius: 6px; 
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover { background: #1557b0; }
+    select { width: 100%; padding: 7px; font-size: 14px; }
+    .cadre-section { margin: 25px 0 15px 0; }
+    
+    .collapsible { 
+      cursor: pointer; 
+      font-weight: bold; 
+      background: #f1f3f4; 
+      padding: 12px 15px; 
+      border-radius: 6px; 
+      margin-bottom: 8px;
+      user-select: none;
+    }
+    .collapsible:hover { background: #e8eaed; }
+    .collapsible::before { 
+      content: "▶ "; 
+      transition: transform 0.2s;
+    }
+    .collapsible.open::before { 
+      transform: rotate(90deg); 
+    }
+    .content { 
+      display: none; 
+      padding: 12px 15px; 
+      background: #fafafa; 
+      border-left: 4px solid #1a73e8;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Start OSUT - Trainee & Cadre Assignment</h2>
+
+<div class="section">
+  <label><strong>Trainees (one per line):</strong></label><br>
+  <textarea id="trainees" placeholder="PVT Smith&#10;PVT Johnson&#10;PVT Williams" oninput="generateTable()"></textarea>
+</div>
+
+<div class="cadre-section">
+  <div class="collapsible" id="s3Header">Present S3 Leadership</div>
+  <div class="content" id="s3Container"></div>
+
+  <div class="collapsible" id="dsHeader">Present Drill Sergeants (DS)</div>
+  <div class="content" id="dsContainer"></div>
+
+  <div class="collapsible" id="diHeader">Present Drill Instructors (DI)</div>
+  <div class="content" id="diContainer"></div>
+
+  <div class="collapsible" id="rsoHeader">Present Range Safety Officers (RSO)</div>
+  <div class="content" id="rsoContainer"></div>
+</div>
+
+<div id="status" class="status">Enter trainees to generate assignment table...</div>
+
+<div id="assignmentTableContainer"></div>
+
+<div class="section">
+  <button onclick="generateAndApply()">Generate & Apply to Sheet</button>
+</div>
+
+<script>
+let s3List = [], dsList = [], diList = [], rsoList = [];
+let trainees = [];
+
+// Load Cadre
+function loadCadre() {
+  google.script.run
+    .withSuccessHandler(data => {
+      s3List  = data.s3  || [];
+      dsList  = data.ds  || [];
+      diList  = data.di  || [];
+      rsoList = data.rso || [];
+
+      createCheckboxes(s3List,  "s3Container");
+      createCheckboxes(dsList,  "dsContainer");
+      createCheckboxes(diList,  "diContainer");
+      createCheckboxes(rsoList, "rsoContainer");
+    })
+    .withFailureHandler(err => console.error(err))
+    .getCadreData();
+}
+
+function createCheckboxes(list, containerId) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = list.length === 0 
+    ? "<i>No entries found in Cadre sheet.</i>" 
+    : list.map(name => `
+        <div style="margin:6px 0">
+          <input type="checkbox" value="${name}" onchange="generateTable()"> ${name}
+        </div>
+      `).join('');
+}
+
+function setupCollapsibles() {
+  document.querySelectorAll('.collapsible').forEach(header => {
+    header.addEventListener('click', function() {
+      this.classList.toggle('open');
+      const content = this.nextElementSibling;
+      content.style.display = content.style.display === 'block' ? 'none' : 'block';
+    });
+  });
+}
+
+function getTrainees() {
+  return document.getElementById("trainees").value
+    .split("\n")
+    .map(t => t.trim())
+    .filter(t => t.length > 0);
+}
+
+function getChecked(containerId) {
+  return Array.from(document.querySelectorAll(`#${containerId} input:checked`))
+              .map(cb => cb.value);
+}
+
+// Generate table (dropdowns only show checked people)
+function generateTable() {
+  trainees = getTrainees();
+  if (trainees.length === 0) {
+    document.getElementById("assignmentTableContainer").innerHTML = "";
+    updateStatus();
+    return;
+  }
+
+  const checkedRSO = getChecked("rsoContainer");
+  const checkedDI  = getChecked("diContainer");
+
+  const rsoOptions = checkedRSO.map(name => `<option value="${name}">${name}</option>`).join('');
+  const diOptions  = checkedDI.map(name => `<option value="${name}">${name}</option>`).join('');
+
+  let html = `
+    <table>
+      <thead>
+        <tr>
+          <th>Trainee</th>
+          <th>RSO (Required)</th>
+          <th>DI (Required)</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  trainees.forEach((trainee, i) => {
+    html += `
+      <tr>
+        <td><strong>${trainee}</strong></td>
+        <td><select id="rso_${i}">${rsoOptions || '<option value="">No RSO checked</option>'}</select></td>
+        <td><select id="di_${i}">${diOptions || '<option value="">No DI checked</option>'}</select></td>
+      </tr>`;
+  });
+
+  html += `</tbody></table>`;
+  document.getElementById("assignmentTableContainer").innerHTML = html;
+
+  updateStatus();
+}
+
+// ✅ NEW SUFFICIENCY LOGIC - Based only on CHECKED cadre
+function updateStatus() {
+  const numTrainees = trainees.length;
+  if (numTrainees === 0) {
+    document.getElementById("status").innerHTML = "Enter trainees to generate assignment table...";
+    document.getElementById("status").className = "status";
+    return;
+  }
+
+  const checkedDS  = getChecked("dsContainer").length;
+  const checkedDI  = getChecked("diContainer").length;
+  const checkedRSO = getChecked("rsoContainer").length;
+
+  const required = {
+    ds:  Math.ceil(numTrainees / 6),
+    di:  Math.ceil(numTrainees / 3),
+    rso: numTrainees
+  };
+
+  const sufficient = 
+    checkedDS  >= required.ds &&
+    checkedDI  >= required.di &&
+    checkedRSO >= required.rso;
+
+  const statusHTML = `
+    <strong>Trainees:</strong> ${numTrainees}<br>
+    <strong>S3 Leadership:</strong> ${getChecked("s3Container").length} selected (optional)<br>
+    <strong>DS checked:</strong> ${checkedDS} / ${required.ds} required<br>
+    <strong>DI checked:</strong> ${checkedDI} / ${required.di} required<br>
+    <strong>RSO checked:</strong> ${checkedRSO} / ${required.rso} required<br><br>
+    STATUS: <span style="font-size:18px">${sufficient ? "✅ SUFFICIENT" : "❌ INSUFFICIENT"}</span><br>
+    <small>Note: Assignments can reuse people, but sufficiency requires enough unique checked cadre.</small>
+  `;
+
+  const statusDiv = document.getElementById("status");
+  statusDiv.innerHTML = statusHTML;
+  statusDiv.className = "status " + (sufficient ? "good" : "bad");
+}
+
+function generateAndApply() {
+  trainees = getTrainees();
+  if (trainees.length === 0) {
+    alert("Please enter at least one trainee.");
+    return;
+  }
+
+  const assignments = [];
+  for (let i = 0; i < trainees.length; i++) {
+    assignments.push({
+      trainee: trainees[i],
+      rso: document.getElementById(`rso_${i}`)?.value || "",
+      di:  document.getElementById(`di_${i}`)?.value || ""
+    });
+  }
+
+  const dsChecked = getChecked("dsContainer");
+  const s3Checked = getChecked("s3Container");
+
+  google.script.run
+    .withSuccessHandler(result => {
+      alert(result.message || "OSUT started successfully!");
+      google.script.host.close();
+    })
+    .withFailureHandler(err => alert("Error: " + err.message))
+    .processStartOSUT({
+      trainees: trainees,
+      assignments: assignments,
+      ds: dsChecked,
+      s3: s3Checked
+    });
+}
+
+// Initialize
+window.onload = () => {
+  loadCadre();
+  setupCollapsibles();
+};
+</script>
+
+</body>
+</html>
