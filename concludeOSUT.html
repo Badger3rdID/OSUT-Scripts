@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f8f9fa; }
+    h2 { background: #0f172a; color: white; padding: 15px; text-align: center; border-radius: 6px; }
+    button { padding: 12px 24px; font-size: 16px; margin: 10px 5px; border: none; border-radius: 6px; cursor: pointer; }
+    .main-btn { background: #0f172a; color: white; }
+    .generate-btn { background: #38761d; color: white; font-weight: bold; }
+    .status { padding: 15px; border-radius: 8px; margin: 15px 0; font-size: 15px; }
+    .good { background: #d9ead3; color: #137333; }
+    .bad  { background: #fce8e6; color: #c5221f; }
+    textarea, input { width: 100%; padding: 10px; margin: 8px 0; border-radius: 4px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+
+<h2>Conclude OSUT</h2>
+
+<div id="validationSection">
+  <button onclick="validateCompletion()" class="main-btn">Validate Completion & Show Overview</button>
+  <div id="result" class="status"></div>
+</div>
+
+<div id="journalSection" style="display:none;">
+  <h3>Generate Drill Sergeants Journal</h3>
+  <label>Class Name</label>
+  <input id="className" placeholder="z.B. 25-03" value="25-03">
+
+  <label>Trainees Not Present (eine pro Zeile)</label>
+  <textarea id="notPresent" rows="3" placeholder="1. PVT A.Brams"></textarea>
+
+  <label>Comments / Concerns</label>
+  <textarea id="comments" rows="6" placeholder="All trainees performed well..."></textarea>
+
+  <button onclick="generateJournal()" class="generate-btn">Generate Drill Sergeants Journal</button>
+  <pre id="journalOutput" style="background:#f1f3f4; padding:15px; border-radius:8px; white-space:pre-wrap; display:none;"></pre>
+  <button onclick="copyJournal()" style="display:none;" id="copyBtn">Copy to Clipboard</button>
+</div>
+
+<script>
+function validateCompletion() {
+  google.script.run
+    .withSuccessHandler(result => {
+      const div = document.getElementById("result");
+      if (result.allValid) {
+        div.className = "status good";
+        div.innerHTML = `<strong>✅ All scores are filled and valid!</strong><br>All trainees can graduate.`;
+      } else {
+        div.className = "status bad";
+        div.innerHTML = `<strong>❌ Not all scores are valid or filled.</strong><br>Please check the scores before concluding.`;
+      }
+      document.getElementById("journalSection").style.display = "block";
+    })
+    .validateAllScores();
+}
+
+function generateJournal() {
+  const data = {
+    className: document.getElementById("className").value,
+    notPresent: document.getElementById("notPresent").value,
+    comments: document.getElementById("comments").value
+  };
+
+  google.script.run
+    .withSuccessHandler(journalText => {
+      const output = document.getElementById("journalOutput");
+      output.textContent = journalText;
+      output.style.display = "block";
+      document.getElementById("copyBtn").style.display = "inline-block";
+    })
+    .generateDrillSergeantsJournal(data);
+}
+
+function copyJournal() {
+  const text = document.getElementById("journalOutput").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    alert("✅ Journal copied to clipboard!");
+  });
+}
+</script>
+
+</body>
+</html>
