@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h2 { color: #1a73e8; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+    th { background: #f1f3f4; }
+    input { width: 100%; box-sizing: border-box; padding: 6px; }
+    button { padding: 12px 24px; font-size: 16px; background: #1a73e8; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #1557b0; }
+  </style>
+</head>
+<body>
+  <h2>Edit OSUT Parameters - Scoring Guidelines</h2>
+  <table id="paramTable"></table>
+  <br>
+  <button onclick="saveParameters()">Save Parameters</button>
+
+<script>
+function loadParameters() {
+  google.script.run
+    .withSuccessHandler(data => {
+      const table = document.getElementById("paramTable");
+      let html = `<tr>
+        <th>Event</th>
+        <th>Expert</th>
+        <th>Sharpshooter</th>
+        <th>Marksman</th>
+        <th>Maximum</th>
+        <th>Minimum</th>
+        <th>Pass</th>
+      </tr>`;
+
+      data.slice(1).forEach((row, i) => {
+        html += `<tr>
+          <td><strong>${row[0]}</strong></td>
+          <td><input type="number" id="expert_${i}" value="${row[1]||''}"></td>
+          <td><input type="number" id="sharpshooter_${i}" value="${row[2]||''}"></td>
+          <td><input type="number" id="marksman_${i}" value="${row[3]||''}"></td>
+          <td><input type="number" id="max_${i}" value="${row[4]||''}"></td>
+          <td><input type="number" id="min_${i}" value="${row[5]||''}"></td>
+          <td><input type="number" id="pass_${i}" value="${row[6]||''}"></td>
+        </tr>`;
+      });
+      table.innerHTML = html;
+    })
+    .getScoringParameters();
+}
+
+function saveParameters() {
+  const data = [];
+  for (let i = 0; i < 8; i++) {   // 8 events
+    data.push([
+      document.getElementById("paramTable").rows[i+1].cells[0].innerText,   // Event name
+      document.getElementById(`expert_${i}`).value,
+      document.getElementById(`sharpshooter_${i}`).value,
+      document.getElementById(`marksman_${i}`).value,
+      document.getElementById(`max_${i}`).value,
+      document.getElementById(`min_${i}`).value,
+      document.getElementById(`pass_${i}`).value
+    ]);
+  }
+
+  google.script.run
+    .withSuccessHandler(() => {
+      alert("✅ Scoring parameters saved!");
+      google.script.host.close();
+    })
+    .withFailureHandler(err => alert("Error: " + err.message))
+    .saveScoringParameters(data);
+}
+
+window.onload = loadParameters;
+</script>
+</body>
+</html>
